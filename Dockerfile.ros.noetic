@@ -11,9 +11,10 @@ ENV ROS_ROOT=/opt/ros/${ROS_DISTRO}
 ENV ROS_PYTHON_VERSION=3
 
 ENV DEBIAN_FRONTEND=noninteractive
+ENV SHELL /bin/bash
+SHELL ["/bin/bash", "-c"] 
 
-WORKDIR /workspace
-
+WORKDIR /tmp
 
 #
 # add the ROS deb repo to the apt sources list
@@ -30,44 +31,77 @@ RUN apt-get update && \
 		ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-RUN sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) main" > /etc/apt/sources.list.d/ros-latest.list'
-RUN curl -s https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | apt-key add -
-
-
 #
 # install bootstrap dependencies
 #
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+RUN sh -c 'echo "deb https://mirrors.ustc.edu.cn/ros/ubuntu $(lsb_release -sc) main" > /etc/apt/sources.list.d/ros-latest.list' \
+    && apt-key adv --keyserver 'hkp://keyserver.ubuntu.com:80' --recv-key C1CF6E31E6BADE8868B172B4F42ED6FBAB17C654 \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
           libpython3-dev \
+          python3-pip \
           python3-rosdep \
           python3-rosinstall-generator \
           python3-vcstool \
-          build-essential && \
-    rosdep init && \
-    rosdep update && \
-    rm -rf /var/lib/apt/lists/*
+          build-essential \
+    && rosdep init \
+    && rosdep update \
+    && rm -rf /var/lib/apt/lists/*
 
-
+# 
+# install OpenCV (with CUDA)
 #
-# download/build the ROS source
-#
-RUN mkdir ros_catkin_ws && \
-    cd ros_catkin_ws && \
-    rosinstall_generator ${ROS_PKG} vision_msgs --rosdistro ${ROS_DISTRO} --deps --tar > ${ROS_DISTRO}-${ROS_PKG}.rosinstall && \
-    mkdir src && \
-    vcs import --input ${ROS_DISTRO}-${ROS_PKG}.rosinstall ./src && \
-    apt-get update && \
-    rosdep install --from-paths ./src --ignore-packages-from-source --rosdistro ${ROS_DISTRO} --skip-keys python3-pykdl -y && \
-    python3 ./src/catkin/bin/catkin_make_isolated --install --install-space ${ROS_ROOT} -DCMAKE_BUILD_TYPE=Release && \
-    rm -rf /var/lib/apt/lists/*
+ARG OPENCV_DEB=OpenCV-3.4.16-aarch64.tar.gz
+ADD ./packages/${OPENCV_DEB} /tmp/opencv/
 
+RUN apt-get purge -y '*opencv*' || echo "previous OpenCV installation not found" \
+    && cd opencv \
+    && dpkg -i --force-depends *.deb \
+    && apt-get update \
+    && apt-get install -y -f --no-install-recommends \
+    && dpkg -i *.deb \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean \
+    && cd ../ \
+    && rm -rf opencv \
+    && cp -r /usr/include/opencv2 /usr/local/include/opencv2 \
+    && cp -r /usr/lib/python3.8/dist-packages/cv2 /usr/local/lib/python3.8/dist-packages/cv2
 
-#
-# setup entrypoint
+# 
+# download/build ROS from source
 #
 COPY ./packages/ros_entrypoint.sh /ros_entrypoint.sh
-RUN echo 'source /opt/ros/${ROS_DISTRO}/setup.bash' >> /root/.bashrc
+
+RUN mkdir -p ros_catkin_ws/src \
+    && cd ros_catkin_ws \
+    && rosinstall_generator --deps --rosdistro ${ROS_DISTRO} --tar \
+        ${ROS_PKG} \
+        tf \
+		camera_calibration_parsers \
+		camera_info_manager \
+		cv_bridge \
+		vision_opencv \
+		vision_msgs \
+		image_geometry \
+		image_pipeline \
+		image_transport \
+		compressed_image_transport \
+		compressed_depth_image_transport \
+		> ${ROS_DISTRO}-${ROS_PKG}.rosinstall \
+    && vcs import --input ${ROS_DISTRO}-${ROS_PKG}.rosinstall ./src \
+    && apt-get update \
+    && rosdep install -y \
+        --ignore-packages-from-source \
+        --from-paths src \
+	    --rosdistro ${ROS_DISTRO} \
+	    --skip-keys "libopencv-dev libopencv-contrib-dev libopencv-imgproc-dev python-opencv python3-opencv" \
+    && python3 ./src/catkin/bin/catkin_make_isolated --install --install-space ${ROS_ROOT} -DCMAKE_BUILD_TYPE=Release \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean \
+    && cd ../ \
+    && rm -rf ros_catkin_ws \
+    && echo 'source /opt/ros/${ROS_DISTRO}/setup.bash' >> /root/.bashrc
+
 ENTRYPOINT ["/ros_entrypoint.sh"]
 CMD ["bash"]
 WORKDIR /
