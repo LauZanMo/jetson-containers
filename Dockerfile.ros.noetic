@@ -19,16 +19,16 @@ WORKDIR /tmp
 #
 # add the ROS deb repo to the apt sources list
 #
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        git \
-		cmake \
-		build-essential \
-		curl \
-		wget \
-		gnupg2 \
-		lsb-release \
-		ca-certificates \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+            git \
+            cmake \
+            build-essential \
+            curl \
+            wget \
+            gnupg2 \
+            lsb-release \
+            ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 #
@@ -38,12 +38,12 @@ RUN sh -c 'echo "deb https://mirrors.ustc.edu.cn/ros/ubuntu $(lsb_release -sc) m
     && apt-key adv --keyserver 'hkp://keyserver.ubuntu.com:80' --recv-key C1CF6E31E6BADE8868B172B4F42ED6FBAB17C654 \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
-          libpython3-dev \
-          python3-pip \
-          python3-rosdep \
-          python3-rosinstall-generator \
-          python3-vcstool \
-          build-essential \
+            libpython3-dev \
+            python3-pip \
+            python3-rosdep \
+            python3-rosinstall-generator \
+            python3-vcstool \
+            build-essential \
     && rosdep init \
     && rosdep update \
     && rm -rf /var/lib/apt/lists/*
@@ -66,6 +66,27 @@ RUN apt-get purge -y '*opencv*' || echo "previous OpenCV installation not found"
     && rm -rf opencv \
     && cp -r /usr/include/opencv2 /usr/local/include/opencv2 \
     && cp -r /usr/lib/python3.6/dist-packages/cv2 /usr/local/lib/python3.6/dist-packages/cv2
+
+# 
+# upgrade cmake
+# to fix find boost cmake file bug
+#
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+            software-properties-common \
+            apt-transport-https \
+            ca-certificates \
+            gnupg \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean \
+    && wget -qO - https://apt.kitware.com/keys/kitware-archive-latest.asc | apt-key add - \
+    && apt-add-repository 'deb https://apt.kitware.com/ubuntu/ bionic main' \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends --only-upgrade \
+            cmake \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean \
+    && cmake --version
 
 # 
 # download/build ROS from source
