@@ -1,0 +1,38 @@
+ARG BASE_IMAGE=lauzanmo/vins-gpu:1.0
+FROM ${BASE_IMAGE}
+
+RUN apt-get update \
+    && apt-get install -y \
+        cmake \
+        libgoogle-glog-dev \
+        libgflags-dev \
+        libatlas-base-dev \
+        libeigen3-dev \
+        libdw-dev \
+    # build ceres
+    && git clone --branch 1.14.0 https://ceres-solver.googlesource.com/ceres-solver \
+    && cd ceres-solver \
+    && mkdir build \
+    && cd build \
+    && cmake .. \
+    && make -j$(nproc) \
+    && make install \
+    && cd ../.. \
+    && rm -rf ceres-solver \
+    # build libSGM
+    && git clone https://github.com/fixstars/libSGM.git \
+    && cd libSGM \
+    && mkdir build \
+    && cd build \
+    && cmake \
+        -D LIBSGM_SHARED=ON \
+        -D BUILD_OPENCV_WRAPPER=ON \
+        ../ \
+    && make -j$(nproc) \
+    && make install \
+    && cd ../.. \
+    && rm -rf libSGM\
+    # build backward
+    && wget -P /usr/include https://raw.githubusercontent.com/bombela/backward-cpp/master/backward.hpp \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
