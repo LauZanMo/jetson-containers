@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=lauzanmo/vins-gpu:1.0
+ARG BASE_IMAGE=lauzanmo/ros:noetic-ros-base-l4t-r32.6.1
 FROM ${BASE_IMAGE}
 
 RUN apt-get update \
